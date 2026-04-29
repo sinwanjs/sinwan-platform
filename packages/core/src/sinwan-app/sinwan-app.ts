@@ -1,4 +1,6 @@
 import {
+  containerManager,
+  contextManager,
   cookiesManager,
   errorManager,
   eventBusManager,
@@ -124,6 +126,12 @@ export class SinwanApp {
   // These are always initialized — they form the non-negotiable core of every
   // Sinwan application regardless of configuration.
   // -------------------------------------------------------------------------
+
+  /** Inversion-of-Control container. */
+  private _containerManager = containerManager;
+
+  /** Context manager for per-request state and cross-cutting concerns. */
+  private _contextManager = contextManager;
 
   /** Parses, signs, and verifies HTTP cookies on every request. */
   private _cookiesManager = cookiesManager;
@@ -537,6 +545,8 @@ export class SinwanApp {
     // file reads, port bindings, etc.).
     //
     // Wave 1 — foundation: IoC container must exist before everything else.
+    await criticalInit(this._containerManager, "containerManager");
+    await criticalInit(this._contextManager, "contextManager");
     await criticalInit(this._iocManager, "iocManager");
 
     // Wave 2 — lifecycle hooks must be registered before plugins run.
@@ -661,6 +671,8 @@ export class SinwanApp {
     await safeDestroy(this._pluginManager, "pluginManager");
     await safeDestroy(this._lifecycleManager, "lifecycleManager");
     await safeDestroy(this._iocManager, "iocManager");
+    await safeDestroy(this._contextManager, "contextManager");
+    await safeDestroy(this._containerManager, "containerManager");
 
     // ── All managers are stopped! ─────────────────────────────────────────
     if (errors.length > 0) {

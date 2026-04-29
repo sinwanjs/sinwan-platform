@@ -11,15 +11,15 @@ const app = sinwan({
     { name: "grpc", port: 50051, hostname: "localhost" },
   ],
   modules: [],
-  managers: {
-    ws: true,
-    jwt: true,
-    graphql: true,
-    grpc: true,
-    openapi: true,
-    tcp: true,
-    udp: true,
-  },
+  // managers: {
+  //   ws: true,
+  //   jwt: true,
+  //   graphql: true,
+  //   grpc: true,
+  //   openapi: true,
+  //   tcp: true,
+  //   udp: true,
+  // },
 });
 
 await app.start(async () => {
