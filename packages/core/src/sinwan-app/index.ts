@@ -4,11 +4,12 @@ import type { SinwanConfig } from "./types";
 const sinwan = (config: SinwanConfig) => new SinwanApp(config);
 
 const app = sinwan({
+  development: true,
   name: "My Sinwan App",
-  port: 3000,
-  grpcPort: 50051,
-  tcpPort: 4000,
-  udpPort: 4001,
+  protocols: [
+    { name: "http", port: 8080, hostname: "localhost" },
+    { name: "grpc", port: 50051, hostname: "localhost" },
+  ],
   modules: [],
   managers: {
     ws: true,

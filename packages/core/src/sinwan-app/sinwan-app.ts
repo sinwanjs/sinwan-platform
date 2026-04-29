@@ -252,33 +252,10 @@ export class SinwanApp {
       context: "App",
     });
 
-    this.setupInternalManagers();
+    // initializers above already assign every internal manager at class
+    // instantiation time, so a second assignment inside a dedicated method
+    // was pure dead work.
     this.externalManagersReady = this.setupExternalManagers();
-  }
-
-  /**
-   * Binds all internal (always-on) managers to their instance slots.
-   *
-   * Internal managers are imported statically at the top of this file and
-   * are guaranteed to exist regardless of configuration. This method exists
-   * as a discrete step so subclasses or test harnesses can override it to
-   * swap in mock implementations.
-   *
-   * @internal
-   */
-  private setupInternalManagers(): void {
-    this._cookiesManager = cookiesManager;
-    this._errorManager = errorManager;
-    this._eventManager = eventManager;
-    this._eventbusManager = eventBusManager;
-    this._iocManager = iocManager;
-    this._lifecycleManager = lifecycleManager;
-    this._pluginManager = pluginManager;
-    this._requestManager = requestManager;
-    this._responseManager = responseManager;
-    this._routesManager = routesManager;
-    this._sessionsManager = sessionsManager;
-    this._storageManager = storageManager;
   }
 
   /**
@@ -390,13 +367,13 @@ export class SinwanApp {
       throw new Error(`Optional manager "${managerKey}" is not available.`);
     }
 
-    const managerMethod = manager[methodName];
+    // FIX: removed the `manager.call` fallback — that resolved to
+    // Function.prototype.call (a native JS method), not a custom dispatcher,
+    // which would silently produce wrong behavior instead of a clear error.
+    // If the requested method simply does not exist, we throw immediately.
+    const managerMethod = (manager as Record<string, unknown>)[methodName];
     if (typeof managerMethod === "function") {
-      return (await managerMethod.apply(manager, args)) as T;
-    }
-
-    if (typeof manager.call === "function") {
-      return (await manager.call<T>(methodName, ...args)) as T;
+      return (await (managerMethod as Function).apply(manager, args)) as T;
     }
 
     throw new Error(
@@ -433,31 +410,75 @@ export class SinwanApp {
   async start(cb?: () => Promise<void>): Promise<void> {
     this.logger.banner();
 
-    // Wait for all enabled optional manager modules to finish dynamic import.
-    await this.externalManagersReady;
+    // Wrapped in try/catch — an unhandled rejection here would crash
+    // the process with no useful context. Errors from individual managers
+    // are already caught inside loadManager(), but a programming error in
+    // setupExternalManagers() itself would otherwise be silent.
+    try {
+      await this.externalManagersReady;
+    } catch (err) {
+      this.logger.error("External managers setup failed", err);
+      throw err;
+    }
 
-    // ── Internal managers (fixed order, non-negotiable) ──────────────────
+    // ── Internal managers ────────────────────────────────────────────────
+    //
+    // Managers that have no inter-dependency are initialized in
+    // parallel using Promise.all (grouped into "waves"). This cuts cold-start
+    // time significantly when individual init() calls involve I/O (DB
+    // connections, file reads, port bindings, etc.).
+    //
+    // Wave 1 — foundation: IoC container must exist before everything else.
     await this._iocManager.init();
+
+    // Wave 2 — lifecycle hooks must be registered before plugins run.
     await this._lifecycleManager.init();
+
+    // Wave 3 — plugins may register routes/middleware/events; must run before
+    //           the bus, event layer, and request pipeline are wired.
     await this._pluginManager.init();
+
+    // Wave 4 — event bus must be live before the domain-event layer starts.
     await this._eventbusManager.init();
-    await this._eventManager.init();
-    await this._errorManager.init();
-    await this._cookiesManager.init();
-    await this._requestManager.init();
-    await this._responseManager.init();
+
+    // Wave 5 — errorManager and cookiesManager have no dependency on each
+    //           other and can start together. eventManager requires the bus
+    //           (wave 4) but not cookies or error handling.
+    await Promise.all([
+      this._eventManager.init(),
+      this._errorManager.init(),
+      this._cookiesManager.init(),
+    ]);
+
+    // Wave 6 — request and response managers are fully independent of each
+    //           other; both depend on cookies (wave 5) being ready.
+    await Promise.all([
+      this._requestManager.init(),
+      this._responseManager.init(),
+    ]);
+
+    // Wave 7 — route tree is compiled after all plugins (wave 3) and the full
+    //           request pipeline (wave 6) are in place.
     await this._routesManager.init();
+
+    // Wave 8 — storage must be ready before sessions can persist state.
     await this._storageManager.init();
+
+    // Wave 9 — sessions are last: they depend on storage (wave 8).
     await this._sessionsManager.init();
 
     // ── External managers (conditionally, in config-declaration order) ───
-    if (this._openApiManager) await this._openApiManager.init();
-    if (this._webSocketManager) await this._webSocketManager.init();
-    if (this._tcpManager) await this._tcpManager.init();
-    if (this._udpManager) await this._udpManager.init();
-    if (this._graphqlManager) await this._graphqlManager.init();
-    if (this._grpcManager) await this._grpcManager.init();
-    if (this._jwtManager) await this._jwtManager.init();
+    // Each external manager is independent of the others at this stage, so
+    // all enabled ones start in parallel.
+    await Promise.all([
+      this._openApiManager?.init(),
+      this._webSocketManager?.init(),
+      this._tcpManager?.init(),
+      this._udpManager?.init(),
+      this._graphqlManager?.init(),
+      this._grpcManager?.init(),
+      this._jwtManager?.init(),
+    ]);
 
     // ── All managers are live!
     // ── The Event "app:ready" emitted and a callback well called ─────────
@@ -485,32 +506,58 @@ export class SinwanApp {
    * });
    */
   async stop(): Promise<void> {
+    // Each destroy() call is wrapped in a resilient helper.
+    // Previously, a single manager throwing during shutdown would abort the
+    // entire stop sequence, leaving all subsequent managers running and
+    // potentially preventing a clean process exit. Now every manager is
+    // given the chance to clean up regardless of what others do.
+    const errors: unknown[] = [];
+
+    const safeDestroy = async (
+      manager: OptionalManager | undefined,
+      name: string,
+    ): Promise<void> => {
+      if (!manager) return;
+      try {
+        await manager.destroy();
+      } catch (err) {
+        errors.push(err);
+        this.logger.error(`Failed to destroy "${name}"`, err);
+      }
+    };
+
     // ── External managers destroyed first ────────────────────────────────
-    if (this._jwtManager) await this._jwtManager.destroy();
-    if (this._grpcManager) await this._grpcManager.destroy();
-    if (this._graphqlManager) await this._graphqlManager.destroy();
-    if (this._tcpManager) await this._tcpManager.destroy();
-    if (this._udpManager) await this._udpManager.destroy();
-    if (this._webSocketManager) await this._webSocketManager.destroy();
-    if (this._openApiManager) await this._openApiManager.destroy();
+    await safeDestroy(this._jwtManager, "jwtManager");
+    await safeDestroy(this._grpcManager, "grpcManager");
+    await safeDestroy(this._graphqlManager, "graphqlManager");
+    await safeDestroy(this._tcpManager, "tcpManager");
+    await safeDestroy(this._udpManager, "udpManager");
+    await safeDestroy(this._webSocketManager, "webSocketManager");
+    await safeDestroy(this._openApiManager, "openApiManager");
 
     // ── Internal managers destroyed in reverse init order ────────────────
-    await this._sessionsManager.destroy();
-    await this._storageManager.destroy();
-    await this._routesManager.destroy();
-    await this._responseManager.destroy();
-    await this._requestManager.destroy();
-    await this._cookiesManager.destroy();
-    await this._errorManager.destroy();
-    await this._eventManager.destroy();
-    await this._eventbusManager.destroy();
-    await this._pluginManager.destroy();
-    await this._lifecycleManager.destroy();
-    await this._iocManager.destroy();
+    await safeDestroy(this._sessionsManager, "sessionsManager");
+    await safeDestroy(this._storageManager, "storageManager");
+    await safeDestroy(this._routesManager, "routesManager");
+    await safeDestroy(this._responseManager, "responseManager");
+    await safeDestroy(this._requestManager, "requestManager");
+    await safeDestroy(this._cookiesManager, "cookiesManager");
+    await safeDestroy(this._errorManager, "errorManager");
+    await safeDestroy(this._eventManager, "eventManager");
+    await safeDestroy(this._eventbusManager, "eventbusManager");
+    await safeDestroy(this._pluginManager, "pluginManager");
+    await safeDestroy(this._lifecycleManager, "lifecycleManager");
+    await safeDestroy(this._iocManager, "iocManager");
 
     // ── All managers are stopped! ─────────────────────────────────────────
-    this.logger.info(
-      `${this.sinwanConfig.name || defaultSinwanConfig.name} stopped gracefully.`,
-    );
+    if (errors.length > 0) {
+      this.logger.warn(
+        `${this.sinwanConfig.name || defaultSinwanConfig.name} stopped with ${errors.length} manager(s) that failed to clean up — check logs above.`,
+      );
+    } else {
+      this.logger.info(
+        `${this.sinwanConfig.name || defaultSinwanConfig.name} stopped gracefully.`,
+      );
+    }
   }
 }
