@@ -1,7 +1,7 @@
 /**
  * ╔══════════════════════════════════════════════════════════════╗
- * ║              Sinwan — Dev Logger  v2.0                       ║
- * ║  Production-grade · Colored · Leveled · Child-aware · Fast  ║
+ * ║                    Sinwan — Dev Logger                       ║
+ * ║  Production-grade · Colored · Leveled · Child-aware · Fast   ║
  * ╚══════════════════════════════════════════════════════════════╝
  */
 
