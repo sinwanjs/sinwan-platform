@@ -421,63 +421,176 @@ export class SinwanApp {
       throw err;
     }
 
+    // ── Internal manager error handling ─────────────────────────────────
+    //
+    // Internal managers are critical — the application cannot run if any
+    // of them fail to initialize. When one throws we must not leave already-
+    // started managers dangling (open DB connections, bound ports, allocated
+    // memory, etc.). The strategy is:
+    //
+    //  1. Track every manager that successfully called init() in order.
+    //  2. If any init() throws, immediately destroy all already-initialized
+    //     managers in reverse order (LIFO rollback).
+    //  3. Re-throw so the caller knows startup did not complete.
+    //
+    // `criticalInit` encapsulates steps 1-3 for a single manager so the
+    // wave-based init sequence below stays readable.
+
+    /** Managers that have successfully completed init(), in insertion order. */
+    const initializedInternalManagers: Array<{
+      manager: OptionalManager;
+      name: string;
+    }> = [];
+
+    /**
+     * Initializes a critical (internal) manager and registers it for rollback.
+     *
+     * On failure: destroys every already-initialized manager in reverse order,
+     * then throws an abort error so `start()` rejects immediately.
+     *
+     * @param manager - The manager instance to initialize.
+     * @param name    - Human-readable name used in log messages.
+     */
+    const criticalInit = async (
+      manager: OptionalManager,
+      name: string,
+    ): Promise<void> => {
+      try {
+        await manager.init();
+        initializedInternalManagers.push({ manager, name });
+      } catch (initErr) {
+        this.logger.error(
+          `Critical manager "${name}" failed to initialize — rolling back ${initializedInternalManagers.length} already-started manager(s).`,
+          initErr,
+        );
+
+        // Rollback in reverse initialization order (LIFO).
+        for (const { manager: m, name: n } of [
+          ...initializedInternalManagers,
+        ].reverse()) {
+          try {
+            await m.destroy();
+          } catch (destroyErr) {
+            this.logger.error(
+              `Failed to rollback "${n}" during startup error cleanup.`,
+              destroyErr,
+            );
+          }
+        }
+
+        throw new Error(
+          `Startup aborted: critical manager "${name}" failed to initialize.`,
+        );
+      }
+    };
+
+    // ── External manager error handling ──────────────────────────────────
+    //
+    // External managers are optional — if one fails to initialize the
+    // application can still serve traffic using the remaining managers.
+    // The strategy is:
+    //
+    //  1. Attempt init() for every enabled external manager in parallel.
+    //  2. On failure: log the error, null out the manager slot so subsequent
+    //     code never tries to call methods on an inconsistent instance, and
+    //     continue — the rejection is intentionally swallowed here.
+    //
+    // `optionalInit` encapsulates this for a single manager.
+
+    /**
+     * Initializes an optional (external) manager.
+     *
+     * On failure: logs the error, clears the manager slot so the instance is
+     * treated as unavailable for the rest of the application's lifetime, and
+     * resolves (never rejects) so a single broken optional manager cannot
+     * abort the entire startup sequence.
+     *
+     * @param manager   - The manager instance to initialize (may be undefined).
+     * @param slotKey   - The private property key to null out on failure.
+     * @param name      - Human-readable name used in log messages.
+     */
+    const optionalInit = async (
+      manager: OptionalManager | undefined,
+      slotKey: keyof OptionalManagerSlotMap,
+      name: string,
+    ): Promise<void> => {
+      if (!manager) return;
+      try {
+        await manager.init();
+      } catch (err) {
+        this.logger.error(
+          `Optional manager "${name}" failed to initialize and will be disabled for this session.`,
+          err,
+        );
+        // Null out the slot so callOptionalManagerMethod() throws a clear
+        // "not available" error instead of calling methods on a broken instance.
+        (this as unknown as OptionalManagerSlotMap)[slotKey] =
+          undefined as unknown as OptionalManager;
+      }
+    };
+
     // ── Internal managers ────────────────────────────────────────────────
     //
-    // Managers that have no inter-dependency are initialized in
-    // parallel using Promise.all (grouped into "waves"). This cuts cold-start
-    // time significantly when individual init() calls involve I/O (DB
-    // connections, file reads, port bindings, etc.).
+    // Managers that have no inter-dependency are initialized in parallel
+    // using Promise.all (grouped into "waves"). This cuts cold-start time
+    // significantly when individual init() calls involve I/O (DB connections,
+    // file reads, port bindings, etc.).
     //
     // Wave 1 — foundation: IoC container must exist before everything else.
-    await this._iocManager.init();
+    await criticalInit(this._iocManager, "iocManager");
 
     // Wave 2 — lifecycle hooks must be registered before plugins run.
-    await this._lifecycleManager.init();
+    await criticalInit(this._lifecycleManager, "lifecycleManager");
 
     // Wave 3 — plugins may register routes/middleware/events; must run before
     //           the bus, event layer, and request pipeline are wired.
-    await this._pluginManager.init();
+    await criticalInit(this._pluginManager, "pluginManager");
 
     // Wave 4 — event bus must be live before the domain-event layer starts.
-    await this._eventbusManager.init();
+    await criticalInit(this._eventbusManager, "eventbusManager");
 
     // Wave 5 — errorManager and cookiesManager have no dependency on each
     //           other and can start together. eventManager requires the bus
     //           (wave 4) but not cookies or error handling.
     await Promise.all([
-      this._eventManager.init(),
-      this._errorManager.init(),
-      this._cookiesManager.init(),
+      criticalInit(this._eventManager, "eventManager"),
+      criticalInit(this._errorManager, "errorManager"),
+      criticalInit(this._cookiesManager, "cookiesManager"),
     ]);
 
     // Wave 6 — request and response managers are fully independent of each
     //           other; both depend on cookies (wave 5) being ready.
     await Promise.all([
-      this._requestManager.init(),
-      this._responseManager.init(),
+      criticalInit(this._requestManager, "requestManager"),
+      criticalInit(this._responseManager, "responseManager"),
     ]);
 
     // Wave 7 — route tree is compiled after all plugins (wave 3) and the full
     //           request pipeline (wave 6) are in place.
-    await this._routesManager.init();
+    await criticalInit(this._routesManager, "routesManager");
 
     // Wave 8 — storage must be ready before sessions can persist state.
-    await this._storageManager.init();
+    await criticalInit(this._storageManager, "storageManager");
 
     // Wave 9 — sessions are last: they depend on storage (wave 8).
-    await this._sessionsManager.init();
+    await criticalInit(this._sessionsManager, "sessionsManager");
 
     // ── External managers (conditionally, in config-declaration order) ───
     // Each external manager is independent of the others at this stage, so
-    // all enabled ones start in parallel.
+    // all enabled ones start in parallel. A failure in one does not block
+    // the others — see optionalInit above.
     await Promise.all([
-      this._openApiManager?.init(),
-      this._webSocketManager?.init(),
-      this._tcpManager?.init(),
-      this._udpManager?.init(),
-      this._graphqlManager?.init(),
-      this._grpcManager?.init(),
-      this._jwtManager?.init(),
+      optionalInit(this._openApiManager, "_openApiManager", "openApiManager"),
+      optionalInit(
+        this._webSocketManager,
+        "_webSocketManager",
+        "webSocketManager",
+      ),
+      optionalInit(this._tcpManager, "_tcpManager", "tcpManager"),
+      optionalInit(this._udpManager, "_udpManager", "udpManager"),
+      optionalInit(this._graphqlManager, "_graphqlManager", "graphqlManager"),
+      optionalInit(this._grpcManager, "_grpcManager", "grpcManager"),
+      optionalInit(this._jwtManager, "_jwtManager", "jwtManager"),
     ]);
 
     // ── All managers are live!
