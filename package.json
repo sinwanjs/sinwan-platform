@@ -1,0 +1,15 @@
+{
+  "name": "sinwan",
+  "version": "0.1.0",
+  "description": "A modern web framework for building fast and scalable web applications.",
+  "scripts": {
+    "build": "bun run build.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

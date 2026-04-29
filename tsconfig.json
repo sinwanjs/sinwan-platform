@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    // Runtime and language baseline for a modern framework
+    "lib": ["ESNext"],
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "jsx": "preserve",
+    "allowJs": true,
+    "types": ["bun"],
+    "resolveJsonModule": true,
+
+    // Bundler-friendly resolution and emit strategy
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "isolatedModules": true,
+
+    // Quality and safety checks for library code
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "useUnknownInCatchVariables": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+
+    // Project-specific tradeoffs
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noPropertyAccessFromIndexSignature": false
+  },
+  "include": ["src/**/*.ts", "build.ts"],
+  "exclude": ["dist", "docs", "node_modules"]
+}
