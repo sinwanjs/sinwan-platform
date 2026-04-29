@@ -242,10 +242,6 @@ export class SinwanApp {
     this.logger = logger({
       appName: this.sinwanConfig.name || defaultSinwanConfig.name!,
       context: "App",
-      option: {
-        level: 0,
-        JSON: true,
-      },
     });
 
     this.setupInternalManagers();
