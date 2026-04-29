@@ -12,7 +12,12 @@ import {
   storageManager,
   sessionsManager,
 } from "../managers";
-import type { SinwanConfig } from "./types";
+import type {
+  SinwanConfig,
+  OptionalManager,
+  OptionalManagerKey,
+  OptionalManagerSlotMap,
+} from "./types";
 import { logger } from "@sinwan/logger";
 
 /**
@@ -30,7 +35,7 @@ import { logger } from "@sinwan/logger";
  *   moduleName: "@sinwan/smtp",
  * };
  */
-const mapManagerKeyToModuleName: Record<
+export const mapManagerKeyToModuleName: Record<
   string,
   { configKey: string; moduleName: string }
 > = {
@@ -51,11 +56,14 @@ const mapManagerKeyToModuleName: Record<
  * starts with the smallest possible footprint.
  */
 export const defaultSinwanConfig: SinwanConfig = {
-  name: "SinwanApp",
-  port: 3000,
-  grpcPort: 50051,
-  tcpPort: 4000,
-  udpPort: 4001,
+  development: false,
+  name: "sinwan",
+  protocols: [
+    { name: "http", port: 3000, hostname: "localhost" },
+    { name: "grpc", port: 50051, hostname: "localhost" },
+    { name: "tcp", port: 4000, hostname: "localhost" },
+    { name: "udp", port: 4001, hostname: "localhost" },
+  ],
   modules: [],
   managers: {
     ws: false,
@@ -67,8 +75,6 @@ export const defaultSinwanConfig: SinwanConfig = {
     openapi: false,
   },
 };
-
-// ─── Application kernel ─────────────────────────────────────────────────────
 
 /**
  * `SinwanApp` is the central kernel of the Sinwan framework.
@@ -110,6 +116,9 @@ export class SinwanApp {
 
   /** Resolved configuration (user config merged with defaults). */
   private sinwanConfig: SinwanConfig;
+
+  /** Tracks completion of all optional manager dynamic imports. */
+  private externalManagersReady!: Promise<void>;
 
   // ─── Internal manager slots ─────────────────────────────────────────────
   // These are always initialized — they form the non-negotiable core of every
@@ -189,38 +198,37 @@ export class SinwanApp {
   private _storageManager = storageManager;
 
   // ─── External (optional) manager slots ──────────────────────────────────
-  // Declared as `any` because the types live in optional peer-dependency
-  // packages that may not be installed. Each slot is populated only when
-  // the corresponding config flag is `true` and the package is importable.
+  // Each slot uses a shared lifecycle contract (`init` / `destroy`) so core
+  // startup/shutdown remains type-safe even when concrete manager packages
+  // are optional peer dependencies.
   // -------------------------------------------------------------------------
 
   /** OpenAPI 3.x spec generator and Swagger UI server. (@sinwan/openapi) */
-  private _openApiManager: any;
+  private _openApiManager?: OptionalManager;
 
   /** TCP raw socket transport manager for low-level network communication. (@sinwan/tcp) */
-  private _tcpManager: any;
+  private _tcpManager?: OptionalManager;
 
   /** UDP raw socket transport manager for connectionless network communication. (@sinwan/udp) */
-  private _udpManager: any;
+  private _udpManager?: OptionalManager;
 
   /** WebSocket server manager for real-time bidirectional communication. (@sinwan/ws) */
-  private _webSocketManager: any;
+  private _webSocketManager?: OptionalManager;
 
   /** GraphQL schema-first API manager with resolver auto-wiring. (@sinwan/graphql) */
-  private _graphqlManager: any;
+  private _graphqlManager?: OptionalManager;
 
   /** gRPC service definition and server manager. (@sinwan/grpc) */
-  private _grpcManager: any;
+  private _grpcManager?: OptionalManager;
 
   /** JWT token generation, signing, and validation middleware. (@sinwan/jwt) */
-  private _jwtManager: any;
+  private _jwtManager?: OptionalManager;
 
   /**
    * Creates a new Sinwan application instance.
    *
    * The constructor is intentionally synchronous. It wires up all internal
-   * managers immediately and **kicks off** (but does not await) the dynamic
-   * import of optional external managers.
+   * managers immediately and starts resolving optional external managers.
    *
    * Call {@link SinwanApp.start} after construction to fully initialize every
    * manager in dependency order.
@@ -245,10 +253,8 @@ export class SinwanApp {
     });
 
     this.setupInternalManagers();
-    this.setupExternalManagers();
+    this.externalManagersReady = this.setupExternalManagers();
   }
-
-  // ─── Manager setup ───────────────────────────────────────────────────────
 
   /**
    * Binds all internal (always-on) managers to their instance slots.
@@ -287,8 +293,10 @@ export class SinwanApp {
    *
    * @internal
    */
-  private setupExternalManagers(): void {
+  private async setupExternalManagers(): Promise<void> {
     if (!this.sinwanConfig.managers) return;
+
+    const loadPromises: Promise<void>[] = [];
 
     for (const [managerKey, { configKey, moduleName }] of Object.entries(
       mapManagerKeyToModuleName,
@@ -298,9 +306,13 @@ export class SinwanApp {
       ];
 
       if (isEnabled) {
-        this.loadManager(managerKey, moduleName);
+        loadPromises.push(
+          this.loadManager(managerKey as OptionalManagerKey, moduleName),
+        );
       }
     }
+
+    await Promise.all(loadPromises);
   }
 
   /**
@@ -318,7 +330,7 @@ export class SinwanApp {
    * @internal
    */
   private async loadManager(
-    managerKey: string,
+    managerKey: OptionalManagerKey,
     moduleName: string,
   ): Promise<void> {
     try {
@@ -327,7 +339,16 @@ export class SinwanApp {
       // Modules may export via `.default` (ESM default export) or directly
       // as a named export matching the manager key. We prefer the named
       // export for explicitness; fall back to `.default` for interop.
-      (this as any)[`_${managerKey}`] = mod[managerKey] ?? mod.default ?? mod;
+      const resolvedManager = mod[managerKey] ?? mod.default ?? mod;
+      if (!this.isOptionalManager(resolvedManager)) {
+        this.logger.error(
+          `Optional manager "${managerKey}" from "${moduleName}" does not implement init()/destroy().`,
+        );
+        return;
+      }
+
+      const slotKey = `_${managerKey}` as keyof OptionalManagerSlotMap;
+      (this as unknown as OptionalManagerSlotMap)[slotKey] = resolvedManager;
     } catch (err) {
       this.logger.error(
         `Failed to load optional manager "${managerKey}" from "${moduleName}". ` +
@@ -337,7 +358,51 @@ export class SinwanApp {
     }
   }
 
-  // ─── Lifecycle ───────────────────────────────────────────────────────────
+  private isOptionalManager(manager: unknown): manager is OptionalManager {
+    if (
+      !manager ||
+      (typeof manager !== "object" && typeof manager !== "function")
+    ) {
+      return false;
+    }
+
+    const lifecycleManager = manager as Partial<OptionalManager>;
+    return (
+      typeof lifecycleManager.init === "function" &&
+      typeof lifecycleManager.destroy === "function"
+    );
+  }
+
+  /**
+   * Calls any method exposed by an optional manager using a type-safe runtime
+   * path, even when that method is not part of the shared OptionalManager
+   * interface.
+   */
+  public async callOptionalManagerMethod<T = unknown>(
+    managerKey: OptionalManagerKey,
+    methodName: string,
+    ...args: unknown[]
+  ): Promise<T> {
+    const slotKey = `_${managerKey}` as keyof OptionalManagerSlotMap;
+    const manager = (this as unknown as OptionalManagerSlotMap)[slotKey];
+
+    if (!manager) {
+      throw new Error(`Optional manager "${managerKey}" is not available.`);
+    }
+
+    const managerMethod = manager[methodName];
+    if (typeof managerMethod === "function") {
+      return (await managerMethod.apply(manager, args)) as T;
+    }
+
+    if (typeof manager.call === "function") {
+      return (await manager.call<T>(methodName, ...args)) as T;
+    }
+
+    throw new Error(
+      `Method "${methodName}" is not available on optional manager "${managerKey}".`,
+    );
+  }
 
   /**
    * Initializes all managers in the prescribed dependency order.
@@ -367,6 +432,10 @@ export class SinwanApp {
    */
   async start(cb?: () => Promise<void>): Promise<void> {
     this.logger.banner();
+
+    // Wait for all enabled optional manager modules to finish dynamic import.
+    await this.externalManagersReady;
+
     // ── Internal managers (fixed order, non-negotiable) ──────────────────
     await this._iocManager.init();
     await this._lifecycleManager.init();
@@ -395,7 +464,9 @@ export class SinwanApp {
     if (cb) {
       await cb();
     } else {
-      this.logger.info("SinwanApp started successfully!");
+      this.logger.info(
+        `${this.sinwanConfig.name || defaultSinwanConfig.name} started successfully!`,
+      );
     }
   }
 
@@ -437,6 +508,9 @@ export class SinwanApp {
     await this._lifecycleManager.destroy();
     await this._iocManager.destroy();
 
-    this.logger.info("Sinwan stopped gracefully.");
+    // ── All managers are stopped! ─────────────────────────────────────────
+    this.logger.info(
+      `${this.sinwanConfig.name || defaultSinwanConfig.name} stopped gracefully.`,
+    );
   }
 }
