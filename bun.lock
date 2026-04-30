@@ -11,8 +11,144 @@
         "typescript": "^5",
       },
     },
+    "packages/cli": {
+      "name": "@sinwan/cli",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/client": {
+      "name": "@sinwan/client",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/core": {
+      "name": "@sinwan/core",
+      "dependencies": {
+        "@sinwan/logger": "workspace:*",
+        "@sinwan/meta": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/graphql": {
+      "name": "@sinwan/graphql",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/grpc": {
+      "name": "@sinwan/grpc",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/jwt": {
+      "name": "@sinwan/jwt",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/logger": {
+      "name": "@sinwan/logger",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/meta": {
+      "name": "@sinwan/meta",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/openapi": {
+      "name": "@sinwan/openapi",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/tcp": {
+      "name": "@sinwan/tcp",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/udp": {
+      "name": "@sinwan/udp",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/ws": {
+      "name": "@sinwan/ws",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
   },
   "packages": {
+    "@sinwan/cli": ["@sinwan/cli@workspace:packages/cli"],
+
+    "@sinwan/client": ["@sinwan/client@workspace:packages/client"],
+
+    "@sinwan/core": ["@sinwan/core@workspace:packages/core"],
+
+    "@sinwan/graphql": ["@sinwan/graphql@workspace:packages/graphql"],
+
+    "@sinwan/grpc": ["@sinwan/grpc@workspace:packages/grpc"],
+
+    "@sinwan/jwt": ["@sinwan/jwt@workspace:packages/jwt"],
+
+    "@sinwan/logger": ["@sinwan/logger@workspace:packages/logger"],
+
+    "@sinwan/meta": ["@sinwan/meta@workspace:packages/meta"],
+
+    "@sinwan/openapi": ["@sinwan/openapi@workspace:packages/openapi"],
+
+    "@sinwan/tcp": ["@sinwan/tcp@workspace:packages/tcp"],
+
+    "@sinwan/udp": ["@sinwan/udp@workspace:packages/udp"],
+
+    "@sinwan/ws": ["@sinwan/ws@workspace:packages/ws"],
+
     "@types/bun": ["@types/bun@1.3.13", "", { "dependencies": { "bun-types": "1.3.13" } }, "sha512-9fqXWk5YIHGGnUau9TEi+qdlTYDAnOj+xLCmSTwXfAIqXr2x4tytJb43E9uCvt09zJURKXwAtkoH4nLQfzeTXw=="],
 
     "@types/node": ["@types/node@25.6.0", "", { "dependencies": { "undici-types": "~7.19.0" } }, "sha512-+qIYRKdNYJwY3vRCZMdJbPLJAtGjQBudzZzdzwQYkEPQd+PJGixUL5QfvCLDaULoLv+RhT3LDkwEfKaAkgSmNQ=="],

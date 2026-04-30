@@ -1,7 +1,21 @@
 {
   "name": "@sinwan/core",
+  "version": "0.1.0",
+  "description": "Core package for the Sinwan web framework.",
   "module": "src/index.ts",
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "default": "./dist/index.js",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "bun run build.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
@@ -9,6 +23,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@sinwan/meta": "workspace:*"
+    "@sinwan/meta": "workspace:*",
+    "@sinwan/logger": "workspace:*"
   }
 }

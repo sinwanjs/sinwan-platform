@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "description": "A modern web framework for building fast and scalable web applications.",
   "scripts": {
-    "build": "bun run build.ts",
+    "build:core": "bun run build -w @sinwan/core",
+    "build:meta": "bun run build -w @sinwan/meta",
+    "build:logger": "bun run build -w @sinwan/logger",
+    "build": "bun run build:core && bun run build:meta && bun run build:logger",
     "test": "bun test"
   },
   "devDependencies": {
@@ -11,5 +14,8 @@
   },
   "peerDependencies": {
     "typescript": "^5"
-  }
+  },
+  "workspaces": [
+    "packages/*"
+  ]
 }

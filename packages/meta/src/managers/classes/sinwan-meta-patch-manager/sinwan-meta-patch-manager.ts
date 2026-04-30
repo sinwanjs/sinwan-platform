@@ -40,7 +40,7 @@ export class SinwanMetaPatchManager {
     if (hasMetadataApi && !override) {
       if (!silent) {
         throw new Error(
-          "Reflect metadata API already exists, and override option is not set; cannot install @sinwan/meta/patch",
+          "Reflect metadata API already exists, and override option is not set; cannot install the path from @sinwan/meta/patch",
         );
       }
       return;

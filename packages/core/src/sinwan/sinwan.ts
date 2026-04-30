@@ -1,3 +1,4 @@
+import { logger } from "@sinwan/logger";
 import {
   containerManager,
   contextManager,
@@ -20,7 +21,7 @@ import type {
   OptionalManagerKey,
   OptionalManagerSlotMap,
 } from "./types";
-import { logger } from "@sinwan/logger";
+// import { logger } from "@sinwan/logger";
 
 /**
  * Maps each optional manager's internal property key to its:

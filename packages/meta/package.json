@@ -1,17 +1,21 @@
 {
   "name": "@sinwan/meta",
-  "main": "src/index.ts",
-  "module": "src/index.ts",
-  "types": "src/index.ts",
+  "version": "0.1.0",
+  "description": "Meta package for the Sinwan web framework.",
+  "module": "dist/index.js",
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "default": "./src/index.ts",
-      "types": "./src/index.ts"
+      "default": "./dist/index.js",
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     },
     "./patch": {
-      "default": "./src/patch.ts",
-      "types": "./src/patch.ts"
+      "default": "./dist/patch.js",
+      "import": "./dist/patch.js",
+      "types": "./dist/patch.d.ts"
     }
   },
   "scripts": {

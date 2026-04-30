@@ -84,8 +84,6 @@ export function SetMetadata<K extends MetaKey = string, V = any>(
 }
 
 export class SinwanReflectorManager {
-  name = "sinwan-reflector-manager";
-
   static createDecorator<TParam>(
     options?: CreateDecoratorOptions<TParam>,
   ): ReflectableDecorator<TParam>;

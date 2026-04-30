@@ -1,5 +1,6 @@
 import { $ } from "bun";
 
+await $`bunx rimraf dist`;
 await $`bunx tsc -p tsconfig.build.json`;
 
 await Bun.build({
