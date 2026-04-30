@@ -1,10 +1,10 @@
 import {
-  SinwanApp,
+  Sinwan,
   defaultSinwanConfig,
   mapManagerKeyToModuleName,
-} from "./sinwan-app";
+} from "./sinwan";
 /**
- * Top-level configuration object passed to {@link SinwanApp}.
+ * Top-level configuration object passed to {@link Sinwan}.
  *
  * All fields are optional. Omitted fields fall back to the defaults
  * defined in {@link defaultSinwanConfig}.
@@ -39,7 +39,7 @@ export interface SinwanConfig {
   /** Enable development mode with hot-reloading and verbose logging. Default: `false`. */
   development?: boolean;
 
-  /** The name of the application. Default: `"SinwanApp"`. */
+  /** The name of the application. Default: `"Sinwan"`. */
   name?: string;
 
   /**
@@ -149,11 +149,11 @@ export interface SinwanConfig {
 }
 
 /**
- * Shared runtime contract for optional managers loaded by `SinwanApp`.
+ * Shared runtime contract for optional managers loaded by `Sinwan`.
  *
  * `call` is a generic optional entrypoint that lets optional manager packages
  * expose a unified invocation API for custom operations while keeping
- * `SinwanApp` decoupled from package-specific method names.
+ * `Sinwan` decoupled from package-specific method names.
  *
  * @example
  * class SinwanJwtManager implements OptionalManager {

@@ -1,7 +1,7 @@
-import { SinwanApp } from "./sinwan-app";
+import { Sinwan } from "./sinwan";
 import type { SinwanConfig } from "./types";
 
-const sinwan = (config: SinwanConfig) => new SinwanApp(config);
+const sinwan = (config: SinwanConfig) => new Sinwan(config);
 
 const app = sinwan({
   development: true,
@@ -11,15 +11,15 @@ const app = sinwan({
     { name: "grpc", port: 50051, hostname: "localhost" },
   ],
   modules: [],
-  // managers: {
-  //   ws: true,
-  //   jwt: true,
-  //   graphql: true,
-  //   grpc: true,
-  //   openapi: true,
-  //   tcp: true,
-  //   udp: true,
-  // },
+  managers: {
+    ws: true,
+    jwt: true,
+    graphql: true,
+    grpc: true,
+    openapi: true,
+    tcp: true,
+    udp: true,
+  },
 });
 
 await app.start(async () => {

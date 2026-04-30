@@ -1,6 +1,6 @@
-import { Logger, type LoggerOptions } from "./sinwan-logger";
+import { Logger, type LoggerOptions, LogLevel } from "./sinwan-logger";
 
-export interface LoggerConfig {
+interface LoggerConfig {
   appName?: string;
   context?: string;
   option?: LoggerOptions;
@@ -21,7 +21,7 @@ export interface LoggerConfig {
  *   SILENT = 5,
  * }
  * const log = logger({ appName: "My-App-Name", context: "Core", option: {
- *  level: "debug",
+ *  level: LogLevel.DEBUG,
  *  json: true,
  *  meta: { version: "1.0.0" },
  * } });
@@ -36,4 +36,4 @@ export interface LoggerConfig {
 const logger = (config: LoggerConfig) =>
   new Logger(config?.appName, config?.context, config?.option);
 
-export { logger };
+export { logger, LogLevel, type LoggerConfig };

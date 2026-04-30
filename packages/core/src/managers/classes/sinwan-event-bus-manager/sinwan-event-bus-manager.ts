@@ -8,7 +8,6 @@ export class SinwanEventBusManager implements Manager {
   }
 
   async init(): Promise<void> {
-    throw new Error("SinwanEventBusManager is not implemented yet");
     // Implementation for initialization
   }
 

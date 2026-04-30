@@ -8,7 +8,6 @@ export class SinwanContainerManager implements Manager {
   }
 
   async init(): Promise<void> {
-    throw new Error("SinwanContainerManager is not implemented yet");
     // Implementation for initialization
   }
 

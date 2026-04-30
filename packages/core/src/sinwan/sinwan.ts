@@ -54,7 +54,7 @@ export const mapManagerKeyToModuleName: Record<
  * Fallback configuration applied when the host application does not
  * provide a value.
  *
- * All optional managers are disabled by default so a vanilla `new SinwanApp({})`
+ * All optional managers are disabled by default so a vanilla `new Sinwan({})`
  * starts with the smallest possible footprint.
  */
 export const defaultSinwanConfig: SinwanConfig = {
@@ -79,12 +79,12 @@ export const defaultSinwanConfig: SinwanConfig = {
 };
 
 /**
- * `SinwanApp` is the central kernel of the Sinwan framework.
+ * `Sinwan` is the central kernel of the Sinwan framework.
  *
  * It bootstraps all internal managers unconditionally, then lazily loads
  * any optional external managers declared in the config. The constructor
  * is synchronous; async work (dynamic imports, manager `.start()` calls)
- * happens inside {@link SinwanApp.start}.
+ * happens inside {@link Sinwan.start}.
  *
  * ### Design constraints
  * - Managers are singletons shared across the entire application.
@@ -93,7 +93,7 @@ export const defaultSinwanConfig: SinwanConfig = {
  *   to preserve compatibility with bundlers that otherwise statically analyze
  *   and inline all `import()` calls, which would defeat the lazy-loading goal.
  */
-export class SinwanApp {
+export class Sinwan {
   /** Logger instance with the "App" context. */
   private logger!: ReturnType<typeof logger>;
 
@@ -238,7 +238,7 @@ export class SinwanApp {
    * The constructor is intentionally synchronous. It wires up all internal
    * managers immediately and starts resolving optional external managers.
    *
-   * Call {@link SinwanApp.start} after construction to fully initialize every
+   * Call {@link Sinwan.start} after construction to fully initialize every
    * manager in dependency order.
    *
    * @param sinwanConfig - Application configuration. Merged with
@@ -304,7 +304,7 @@ export class SinwanApp {
    * Dynamically imports a single external manager package and assigns it
    * to the corresponding private slot on this instance.
    *
-   * Uses {@link SinwanApp.runtimeImport} to avoid static bundler analysis.
+   * Uses {@link Sinwan.runtimeImport} to avoid static bundler analysis.
    * Falls back gracefully if the package is not installed — an error message
    * is emitted via `this.logger.error` so the developer is informed without
    * crashing the process.
