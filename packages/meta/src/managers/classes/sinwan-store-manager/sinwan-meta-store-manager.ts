@@ -1,32 +1,47 @@
-// ─────────────────────────────────────────────
-//  MetadataStore — Native metadata engine
-//  Zero dependencies. Replaces reflect-metadata.
-//
-//  Storage layout:
-//    WeakMap<target, Map<key, Map<property, value>>>
-//
-//  Supports:
-//    - Class-level   metadata (propertyKey = undefined)
-//    - Method-level  metadata (propertyKey = string | Symbol)
-//    - Any key type  (string | Symbol)
-// ─────────────────────────────────────────────
 import { type MetaKey, type PropertyKey_ } from "./types";
 import { isObjectLike, MAX_PROTOTYPE_DEPTH } from "../shared";
 
-// Inner structure:
-//   target → metaKey → (propertyKey | CLASS_KEY) → value
-// Using a Symbol prevents collisions with real property names like "__class__".
+/**
+ * Sentinel key for class-level metadata entries.
+ *
+ * @remarks
+ * A symbol is used to avoid collisions with real property names.
+ */
 const CLASS_KEY: unique symbol = Symbol("__class__");
 
+/**
+ * Native metadata storage manager.
+ *
+ * @remarks
+ * Internal layout:
+ * `WeakMap<target, Map<metaKey, Map<propertyKey | CLASS_KEY, value>>>`
+ *
+ * Capabilities:
+ * - class-level metadata (`propertyKey = undefined`)
+ * - member-level metadata (`propertyKey = string | symbol`)
+ * - inherited lookups with bounded prototype traversal
+ *
+ * The use of `WeakMap` ensures metadata is garbage collected when
+ * the target object becomes unreachable.
+ */
 export class SinwanMetaStoreManager {
-  // WeakMap — targets are GC'd when the class is no longer referenced
+  /**
+   * Backing store for all metadata.
+   */
   private store = new WeakMap<
     object,
     Map<MetaKey, Map<string | symbol, any>>
   >();
 
-  // ── Write ─────────────────────────────────────
-
+  /**
+   * Defines metadata for a target or one of its members.
+   *
+   * @param key Metadata key.
+   * @param value Metadata value.
+   * @param target Target object.
+   * @param propertyKey Optional property key for member-level metadata.
+   * @returns `void`.
+   */
   define(
     key: MetaKey,
     value: any,
@@ -47,8 +62,15 @@ export class SinwanMetaStoreManager {
     targetMeta.get(key)!.set(propKey, value);
   }
 
-  // ── Read ──────────────────────────────────────
-
+  /**
+   * Gets own metadata value (no prototype traversal).
+   *
+   * @typeParam T Expected value type.
+   * @param key Metadata key.
+   * @param target Target object.
+   * @param propertyKey Optional property key.
+   * @returns Metadata value when found; otherwise `undefined`.
+   */
   getOwn<T = any>(
     key: MetaKey,
     target: object,
@@ -58,6 +80,12 @@ export class SinwanMetaStoreManager {
     return this.store.get(target)?.get(key)?.get(propKey) as T | undefined;
   }
 
+  /**
+   * Gets metadata value on the target.
+   *
+   * @remarks
+   * This method is currently equivalent to `getOwn`.
+   */
   get<T = any>(
     key: MetaKey,
     target: object,
@@ -66,8 +94,14 @@ export class SinwanMetaStoreManager {
     return this.getOwn<T>(key, target, propertyKey);
   }
 
-  // ── Check ─────────────────────────────────────
-
+  /**
+   * Checks whether metadata exists directly on the target.
+   *
+   * @param key Metadata key.
+   * @param target Target object.
+   * @param propertyKey Optional property key.
+   * @returns `true` when metadata exists; otherwise `false`.
+   */
   hasOwn(
     key: MetaKey,
     target: object,
@@ -77,6 +111,12 @@ export class SinwanMetaStoreManager {
     return this.store.get(target)?.get(key)?.has(propKey) ?? false;
   }
 
+  /**
+   * Checks whether metadata exists on the target.
+   *
+   * @remarks
+   * This method is currently equivalent to `hasOwn`.
+   */
   has(
     key: MetaKey,
     target: object,
@@ -85,8 +125,17 @@ export class SinwanMetaStoreManager {
     return this.hasOwn(key, target, propertyKey);
   }
 
-  // ── Delete ────────────────────────────────────
-
+  /**
+   * Deletes metadata entry for a key from a target or target member.
+   *
+   * @param key Metadata key to delete.
+   * @param target Target object.
+   * @param propertyKey Optional property key.
+   * @returns `true` when an entry was deleted; otherwise `false`.
+   *
+   * @remarks
+   * Performs automatic cleanup of empty nested maps to keep memory compact.
+   */
   delete(
     key: MetaKey,
     target: object,
@@ -113,15 +162,27 @@ export class SinwanMetaStoreManager {
     return didDelete;
   }
 
-  // ── List all keys on a target ─────────────────
-
+  /**
+   * Lists all metadata keys attached to class-level scope of the target.
+   *
+   * @param target Target object.
+   * @returns Metadata keys for class-level metadata.
+   */
   keys(target: object): MetaKey[] {
     return this.keysForProperty(target);
   }
 
-  // ── List keys for a specific property ─────────
-  // Complexity: O(n) where n = number of distinct metadata keys on the target.
-
+  /**
+   * Lists metadata keys for a specific target property scope.
+   *
+   * @param target Target object.
+   * @param propertyKey Optional property key. Omit for class-level keys.
+   * @returns Metadata keys for the selected scope.
+   *
+   * @remarks
+   * Complexity: $O(n)$ where $n$ is number of distinct metadata keys
+   * stored for the target.
+   */
   keysForProperty(
     target: object,
     propertyKey: PropertyKey_ = undefined,
@@ -139,16 +200,30 @@ export class SinwanMetaStoreManager {
     return keys;
   }
 
-  // ── List all properties for a key on a target ─
-
+  /**
+   * Lists all member property keys that have a given metadata key.
+   *
+   * @param key Metadata key.
+   * @param target Target object.
+   * @returns Property keys containing that metadata key.
+   */
   properties(key: MetaKey, target: object): Array<string | symbol> {
     const props = [...(this.store.get(target)?.get(key)?.keys() ?? [])];
     return props.filter((p): p is string | symbol => p !== CLASS_KEY);
   }
 
-  // ── Prototype-walk helpers ───────────────────
-  // All prototype walks are guarded against circular chains via MAX_PROTOTYPE_DEPTH.
-
+  /**
+   * Gets metadata by walking target and prototype chain.
+   *
+   * @typeParam T Expected value type.
+   * @param key Metadata key.
+   * @param target Start target.
+   * @param propertyKey Optional property key.
+   * @returns First matching metadata value; otherwise `undefined`.
+   *
+   * @remarks
+   * Traversal depth is bounded by `MAX_PROTOTYPE_DEPTH`.
+   */
   getInherited<T = any>(
     key: MetaKey,
     target: object,
@@ -172,6 +247,14 @@ export class SinwanMetaStoreManager {
     return undefined;
   }
 
+  /**
+   * Checks whether metadata exists on target or inherited prototypes.
+   *
+   * @param key Metadata key.
+   * @param target Start target.
+   * @param propertyKey Optional property key.
+   * @returns `true` when metadata is found; otherwise `false`.
+   */
   hasInherited(
     key: MetaKey,
     target: object,
@@ -192,6 +275,12 @@ export class SinwanMetaStoreManager {
     return false;
   }
 
+  /**
+   * Lists unique metadata keys from target and prototype chain.
+   *
+   * @param target Start target.
+   * @returns Deduplicated metadata keys in traversal order.
+   */
   keysInherited(target: object): MetaKey[] {
     const keys = new Set<MetaKey>();
     let current: object | null = target;

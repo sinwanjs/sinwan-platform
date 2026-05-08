@@ -1,7 +1,43 @@
 {
   "name": "@sinwan/ws",
-  "module": "src/index.ts",
+  "version": "0.1.0",
+  "description": "WebSocket package for the Sinwan web framework.",
+  "author": {
+    "name": "Mohammed Ben Cheikh",
+    "email": "mohammed.bencheikh.dev@gmail.com",
+    "url": "https://mohammedbencheikh.com/"
+  },
+  "keywords": [
+    "sinwanjs",
+    "framework",
+    "bun",
+    "typescript",
+    "javascript",
+    "web",
+    "server",
+    "client"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sinwanjs/sinwan.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sinwanjs/sinwan/issues"
+  },
+  "homepage": "https://sinwanjs.com/",
+  "license": "MIT",
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "devDependencies": {
     "@types/bun": "latest"
   },

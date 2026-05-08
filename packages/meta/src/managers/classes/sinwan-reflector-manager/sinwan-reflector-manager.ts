@@ -13,8 +13,14 @@ const KEY_CHARS =
 const DEFAULT_KEY_SIZE = 21;
 
 /**
- * Generates a collision-resistant random key using crypto.getRandomValues().
- * Falls back to Math.random() if crypto API is unavailable (e.g. older runtimes).
+ * Generates a metadata key for decorator factories.
+ *
+ * @param size Key length.
+ * @returns Random key string.
+ *
+ * @remarks
+ * Uses `crypto.getRandomValues()` when available and falls back to
+ * `Math.random()` in older runtimes.
  */
 const createKey = (size: number = DEFAULT_KEY_SIZE): string => {
   let value = "";
@@ -42,18 +48,14 @@ const createKey = (size: number = DEFAULT_KEY_SIZE): string => {
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const isEmpty = (value: unknown): boolean => {
-  if (value === null || value === undefined) return true;
-  if (typeof value === "string") return value.length === 0;
-  if (Array.isArray(value)) return value.length === 0;
-  if (isObject(value)) return Object.keys(value).length === 0;
-  return false;
-};
-
+/**
+ * Resolves metadata value from native Reflect API when available,
+ * otherwise falls back to Sinwan store traversal.
+ */
 const getMetadataValue = (
   metadataKey: MetaKey,
   target: Type<any> | Function,
-) => {
+): unknown => {
   const reflectApi = globalThis.Reflect as any;
   if (reflectApi && typeof reflectApi.getMetadata === "function") {
     return reflectApi.getMetadata(metadataKey, target);
@@ -61,6 +63,20 @@ const getMetadataValue = (
   return MetaStore.getInherited(metadataKey, target as object);
 };
 
+/**
+ * Decorator factory for attaching metadata to classes and class members.
+ *
+ * @typeParam K Metadata key type.
+ * @typeParam V Metadata value type.
+ * @param key Metadata key.
+ * @param value Metadata value.
+ * @returns Decorator that writes metadata into Sinwan metadata storage.
+ *
+ * @remarks
+ * For method decorators, metadata is stored on both:
+ * - the class prototype/property slot
+ * - the function value (`descriptor.value`) when available
+ */
 export function SetMetadata<K extends MetaKey = string, V = any>(
   key: K,
   value: V,
@@ -83,13 +99,52 @@ export function SetMetadata<K extends MetaKey = string, V = any>(
   };
 }
 
+/**
+ * High-level reflection helper for creating and reading metadata decorators.
+ *
+ * @remarks
+ * This manager supports both raw metadata keys and generated decorators
+ * carrying a `.KEY` property. Read operations prefer native `Reflect` metadata
+ * APIs when present, and gracefully fall back to `MetaStore` otherwise.
+ */
 export class SinwanReflectorManager {
+  /**
+   * Creates a typed metadata decorator factory.
+   *
+   * @typeParam TParam Input metadata payload type.
+   * @param options Decorator creation options.
+   * @returns Reflectable decorator factory.
+   */
   static createDecorator<TParam>(
     options?: CreateDecoratorOptions<TParam>,
   ): ReflectableDecorator<TParam>;
+  /**
+   * Creates a metadata decorator factory with transformation.
+   *
+   * @typeParam TParam Input metadata payload type.
+   * @typeParam TTransformed Stored metadata payload type after transform.
+   * @param options Decorator creation options including `transform`.
+   * @returns Reflectable decorator factory.
+   */
   static createDecorator<TParam, TTransformed>(
     options: CreateDecoratorWithTransformOptions<TParam, TTransformed>,
   ): ReflectableDecorator<TParam, TTransformed>;
+  /**
+   * Creates a metadata decorator factory and assigns a stable metadata key.
+   *
+   * @typeParam TParam Input metadata payload type.
+   * @typeParam TTransformed Stored metadata payload type.
+   * @param options Decorator creation options.
+   * @returns Decorator factory exposing `.KEY` for reflective lookups.
+   *
+   * @example
+   * const Roles = SinwanReflectorManager.createDecorator<string[]>({
+   *   key: "auth:roles",
+   * });
+   *
+   * @Roles(["admin"])
+   * class Controller {}
+   */
   static createDecorator<TParam, TTransformed = TParam>(
     options: CreateDecoratorOptions<TParam, TTransformed> = {},
   ): ReflectableDecorator<TParam, TTransformed> {
@@ -118,6 +173,9 @@ export class SinwanReflectorManager {
     return decoratorFn as ReflectableDecorator<TParam, TTransformed>;
   }
 
+  /**
+   * Resolves a raw metadata key from either a key value or reflectable decorator.
+   */
   private resolveKey<TKey>(metadataKeyOrDecorator: TKey): MetaKey {
     const decorator = metadataKeyOrDecorator as ReflectableDecorator<any, any>;
     if (typeof decorator === "function" && decorator.KEY !== undefined) {
@@ -126,14 +184,28 @@ export class SinwanReflectorManager {
     return metadataKeyOrDecorator as MetaKey;
   }
 
+  /**
+   * Gets metadata by decorator factory key.
+   */
   public get<T extends ReflectableDecorator<any>>(
     decorator: T,
     target: Type<any> | Function,
   ): T extends ReflectableDecorator<any, infer R> ? R : unknown;
+  /**
+   * Gets metadata by explicit key.
+   */
   public get<TResult = any, TKey = any>(
     metadataKey: TKey,
     target: Type<any> | Function,
   ): TResult;
+  /**
+   * Gets metadata for a target.
+   *
+   * @typeParam TResult Expected return type.
+   * @param metadataKeyOrDecorator Metadata key or decorator created by `createDecorator`.
+   * @param target Class constructor or function target.
+   * @returns Metadata value when found; otherwise `undefined`.
+   */
   public get<TResult = any, TKey = any>(
     metadataKeyOrDecorator: TKey,
     target: Type<any> | Function,
@@ -142,6 +214,15 @@ export class SinwanReflectorManager {
     return getMetadataValue(metadataKey, target) as TResult;
   }
 
+  /**
+   * Gets metadata from a specific class/prototype member.
+   *
+   * @typeParam T Expected return type.
+   * @param keyOrDecorator Metadata key or decorator.
+   * @param target Prototype or constructor containing the member.
+   * @param propertyKey Method/property key.
+   * @returns Metadata value when found; otherwise `undefined`.
+   */
   public getFromMethod<T = any>(
     keyOrDecorator: any,
     target: object,
@@ -151,14 +232,28 @@ export class SinwanReflectorManager {
     return MetaStore.get<T>(key, target, propertyKey);
   }
 
+  /**
+   * Gets metadata values from all targets, preserving order.
+   */
   public getAll<TParam = any, TTransformed = TParam>(
     decorator: ReflectableDecorator<TParam, TTransformed>,
     targets: (Type<any> | Function)[],
   ): TTransformed extends Array<any> ? TTransformed : TTransformed[];
+  /**
+   * Gets metadata values from all targets using a raw key.
+   */
   public getAll<TResult extends any[] = any[], TKey = any>(
     metadataKey: TKey,
     targets: (Type<any> | Function)[],
   ): TResult;
+  /**
+   * Gets metadata values from all targets.
+   *
+   * @typeParam TResult Expected array result type.
+   * @param metadataKeyOrDecorator Metadata key or decorator.
+   * @param targets Targets to inspect.
+   * @returns Array of resolved metadata values in target iteration order.
+   */
   public getAll<TResult extends any[] = any[], TKey = any>(
     metadataKeyOrDecorator: TKey,
     targets: (Type<any> | Function)[],
@@ -168,6 +263,9 @@ export class SinwanReflectorManager {
     ) as TResult;
   }
 
+  /**
+   * Gets and merges metadata values across targets.
+   */
   public getAllAndMerge<TParam = any, TTransformed = TParam>(
     decorator: ReflectableDecorator<TParam, TTransformed>,
     targets: (Type<any> | Function)[],
@@ -176,10 +274,22 @@ export class SinwanReflectorManager {
     : TTransformed extends object
       ? TTransformed
       : TTransformed[];
+  /**
+   * Gets and merges metadata values across targets using a raw key.
+   */
   public getAllAndMerge<TResult extends any[] | object = any[], TKey = any>(
     metadataKey: TKey,
     targets: (Type<any> | Function)[],
   ): TResult;
+  /**
+   * Gets and merges metadata from targets.
+   *
+   * @remarks
+   * Merge strategy:
+   * - Arrays are concatenated.
+   * - Plain objects are shallow-merged (`{ ...a, ...b }`).
+   * - Primitive or mixed values are accumulated as array pairs.
+   */
   public getAllAndMerge<TResult extends any[] | object = any[], TKey = any>(
     metadataKeyOrDecorator: TKey,
     targets: (Type<any> | Function)[],
@@ -207,14 +317,27 @@ export class SinwanReflectorManager {
     }) as TResult;
   }
 
+  /**
+   * Gets first defined metadata value across targets.
+   */
   public getAllAndOverride<TParam = any, TTransformed = TParam>(
     decorator: ReflectableDecorator<TParam, TTransformed>,
     targets: (Type<any> | Function)[],
   ): TTransformed;
+  /**
+   * Gets first defined metadata value across targets using a raw key.
+   */
   public getAllAndOverride<TResult = any, TKey = any>(
     metadataKey: TKey,
     targets: (Type<any> | Function)[],
   ): TResult;
+  /**
+   * Gets the first non-`undefined` metadata result from ordered targets.
+   *
+   * @param metadataKeyOrDecorator Metadata key or decorator.
+   * @param targets Targets in priority order.
+   * @returns First defined metadata value; otherwise `undefined`.
+   */
   public getAllAndOverride<TResult = any, TKey = any>(
     metadataKeyOrDecorator: TKey,
     targets: (Type<any> | Function)[],
@@ -228,6 +351,13 @@ export class SinwanReflectorManager {
     return undefined;
   }
 
+  /**
+   * Checks whether metadata exists on a target or its prototype chain.
+   *
+   * @param metadataKeyOrDecorator Metadata key or decorator.
+   * @param target Class constructor or function target.
+   * @returns `true` when metadata exists; otherwise `false`.
+   */
   public has(
     metadataKeyOrDecorator: any,
     target: Type<any> | Function,

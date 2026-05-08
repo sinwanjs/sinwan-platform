@@ -1,4 +1,5 @@
 import { $ } from "bun";
+import { logger } from "@sinwan/logger";
 
 await $`bunx rimraf dist`;
 await $`bunx tsc -p tsconfig.build.json`;
@@ -8,3 +9,5 @@ await Bun.build({
   outdir: "./dist",
   minify: true,
 });
+
+logger({ context: "Core build" }).info("Core package built successfully.");

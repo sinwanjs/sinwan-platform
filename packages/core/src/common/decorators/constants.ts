@@ -1,0 +1,12 @@
+export const PATH_METADATA = "sinwan:path";
+export const METHOD_METADATA = "sinwan:method";
+export const ROUTES_METADATA = "sinwan:routes";
+export const REDIRECT_METADATA = "sinwan:redirect";
+export const RENDER_METADATA = "sinwan:render";
+export const HTTP_CODE_METADATA = "sinwan:httpCode";
+export const SSE_METADATA = "sinwan:sse";
+export const VERSION_METADATA = "sinwan:version";
+export const SCOPE_OPTIONS_METADATA = "sinwan:scopeOptions";
+export const GUARDS_METADATA = "sinwan:guards";
+export const CONTROLLER_WATERMARK = "sinwan:controller";
+export const HOST_METADATA = "sinwan:host";

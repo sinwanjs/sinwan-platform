@@ -2,27 +2,53 @@
   "name": "@sinwan/meta",
   "version": "0.1.0",
   "description": "Meta package for the Sinwan web framework.",
-  "module": "dist/index.js",
+  "author": {
+    "name": "Mohammed Ben Cheikh",
+    "email": "mohammed.bencheikh.dev@gmail.com",
+    "url": "https://mohammedbencheikh.com/"
+  },
+  "keywords": [
+    "sinwanjs",
+    "framework",
+    "bun",
+    "typescript",
+    "javascript",
+    "web",
+    "server",
+    "client"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sinwanjs/sinwan.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sinwanjs/sinwan/issues"
+  },
+  "homepage": "https://sinwanjs.com/",
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "default": "./dist/index.js",
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
     "./patch": {
-      "default": "./dist/patch.js",
       "import": "./dist/patch.js",
       "types": "./dist/patch.d.ts"
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "bun run build.ts"
+    "build": "bun run build.ts",
+    "prepublishOnly": "bun run build"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@sinwan/logger": "workspace:*"
   },
   "peerDependencies": {
     "typescript": "^5"

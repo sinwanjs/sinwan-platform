@@ -113,7 +113,7 @@ export class Logger {
     if (this.json) {
       const line = JSON.stringify({
         ts: new Date().toISOString(),
-        app: this.appName,
+        app: this.appName || "sinwan",
         ctx: this.context,
         level: levelStr,
         msg,
@@ -126,7 +126,7 @@ export class Logger {
 
     const paddedLevel = levelStr.toUpperCase().padStart(6);
     const prefix =
-      `${C.green}[${this.appName}]${C.reset}` +
+      `${C.green}[${this.appName || "sinwan"}]${C.reset}` +
       ` ${C.gray}${this.timestamp()}${C.reset}` +
       ` ${color}${paddedLevel}${C.reset}` +
       ` ${C.yellow}[${this.context}]${C.reset}`;
