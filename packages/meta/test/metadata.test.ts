@@ -277,6 +277,7 @@ describe("reflector", () => {
 
     class A {}
     class B {}
+    
 
     Config({ host: "localhost" })(A);
     Config({ port: 3000 })(B);
