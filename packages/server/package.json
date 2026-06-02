@@ -1,5 +1,7 @@
 {
   "name": "@sinwan/server",
+  "version": "0.1.0",
+  "description": "Server package for the Sinwan web framework.",
   "module": "src/index.ts",
   "type": "module",
   "devDependencies": {

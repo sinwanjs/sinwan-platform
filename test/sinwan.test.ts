@@ -1,5 +1,5 @@
 /**
- * Sinwan Framework — Test Suite Entry
+ * Sinwan Backend Framework — Test Suite Entry
  *
  * This file provides a polished starting point for framework tests:
  *
